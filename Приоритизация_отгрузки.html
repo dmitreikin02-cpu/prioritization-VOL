@@ -1211,7 +1211,13 @@
             } catch (error) {
                 showMessage(`Ошибка: ${error.message}`, 'error');
             }
+        }
         function calculateCubicCapacity(data) {
+            if (!data || !Array.isArray(data)) {
+                console.error('calculateCubicCapacity: invalid data', data);
+                return new Map();
+            }
+            
             const transportCubicMap = new Map();
             
             data.forEach(row => {
@@ -1284,7 +1290,10 @@
                 return;
             }
             try {
+                console.log('Processing', processedData.length, 'rows for export');
+                console.log('Sample row:', processedData[0]);
                 const cubicMap = calculateCubicCapacity(processedData);
+                console.log('Cubic capacity calculated for', cubicMap.size, 'transports');
                 
                 const transportFirstSeqMap = new Map();
                 processedData.forEach(row => {
@@ -1407,6 +1416,7 @@
                 const wb = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(wb, ws, 'Приоритизация');
                 
+                console.log('Cubic sheet data length:', cubicSheetData.length);
                 if (cubicSheetData.length > 0) {
                     const ws2 = XLSX.utils.json_to_sheet(cubicSheetData);
                     const cubicColWidths = [
@@ -1417,40 +1427,11 @@
                     ];
                     ws2['!cols'] = cubicColWidths;
                     XLSX.utils.book_append_sheet(wb, ws2, 'Кубатура');
+                    console.log('Second sheet "Кубатура" created with', cubicSheetData.length, 'rows');
+                } else {
+                    console.log('No cubic data found, second sheet not created');
                 }
                 
-                const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-                XLSX.writeFile(wb, `Приоритизация_загрузки_${timestamp}.xlsx`);
-                showMessage('Excel файл успешно скачан!', 'success');
-            } catch (error) {
-                showMessage(`Ошибка при создании Excel файла: ${error.message}`, 'error');
-            }
-        }
-            try {
-                const exportData = processedData.map(row => ({
-                    'Транспорт/№ заказа': row.transport,
-                    '№ магазина': row.storeNumber,
-                    'Бренд/ТЦ': row.brand,
-                    'Место': row.place,
-                    'Кол-во кор': row.quantity,
-                    'Последов-ть Бренда в ТС': row.displayBrandSequence,
-                    'Последов-ть внутри Бренда': row.internalSequenceText,
-                    'Коммент.': row.comment
-                }));
-                const ws = XLSX.utils.json_to_sheet(exportData);
-                const colWidths = [
-                    { wch: 20 },
-                    { wch: 15 },
-                    { wch: 25 },
-                    { wch: 15 },
-                    { wch: 12 },
-                    { wch: 22 },
-                    { wch: 22 },
-                    { wch: 30 }
-                ];
-                ws['!cols'] = colWidths;
-                const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, 'Приоритизация');
                 const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
                 XLSX.writeFile(wb, `Приоритизация_загрузки_${timestamp}.xlsx`);
                 showMessage('Excel файл успешно скачан!', 'success');
