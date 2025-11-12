@@ -499,6 +499,7 @@
                                 <th>Последов-ть Бренда в ТС</th>
                                 <th>Последов-ть внутри Бренда</th>
                                 <th>Коммент.</th>
+                                <th>Кубатура</th>
                             </tr>
                         </thead>
                         <tbody id="previewBody">
@@ -1210,13 +1211,51 @@
             } catch (error) {
                 showMessage(`Ошибка: ${error.message}`, 'error');
             }
+        function calculateCubicCapacity(data) {
+            const transportCubicMap = new Map();
+            
+            data.forEach(row => {
+                const transport = row.transport;
+                const quantity = parseFloat(row.quantity) || 0;
+                const comment = (row.comment || '').toString().toLowerCase();
+                const internalSeq = (row.internalSequenceText || '').toString();
+                
+                let shouldInclude = false;
+                
+                if (internalSeq === 'Текстиль' || internalSeq === 'Трансфер') {
+                    shouldInclude = true;
+                } else if (internalSeq === 'POSM' && comment.includes('стандарт')) {
+                    shouldInclude = true;
+                }
+                
+                if (shouldInclude) {
+                    if (!transportCubicMap.has(transport)) {
+                        transportCubicMap.set(transport, 0);
+                    }
+                    transportCubicMap.set(transport, transportCubicMap.get(transport) + (quantity * 0.096));
+                }
+            });
+            
+            return transportCubicMap;
         }
         function displayPreview(data) {
             const tbody = document.getElementById('previewBody');
             tbody.innerHTML = '';
+            
+            const cubicMap = calculateCubicCapacity(data);
             const displayData = data.slice(0, 100);
+            
             displayData.forEach(row => {
                 const tr = document.createElement('tr');
+                let cubicValue = '';
+                
+                if (row.displayBrandSequence == 1) {
+                    const cubic = cubicMap.get(row.transport);
+                    if (cubic !== undefined) {
+                        cubicValue = cubic.toFixed(3) + '<br><small>ПРОВЕРЬ КУБАТУРУ ТС</small>';
+                    }
+                }
+                
                 tr.innerHTML = `
                     <td>${row.transport}</td>
                     <td>${row.storeNumber}</td>
@@ -1226,12 +1265,13 @@
                     <td>${row.displayBrandSequence}</td>
                     <td>${row.internalSequenceText}</td>
                     <td>${row.comment}</td>
+                    <td>${cubicValue}</td>
                 `;
                 tbody.appendChild(tr);
             });
             if (data.length > 100) {
                 const tr = document.createElement('tr');
-                tr.innerHTML = `<td colspan="8" style="text-align: center; font-style: italic; color: var(--secondary);">
+                tr.innerHTML = `<td colspan="9" style="text-align: center; font-style: italic; color: var(--secondary);">
                     ... и еще ${data.length - 100} записей (будут включены в Excel файл)
                 </td>`;
                 tbody.appendChild(tr);
@@ -1243,6 +1283,149 @@
                 showMessage('Нет данных для экспорта', 'error');
                 return;
             }
+            try {
+                const cubicMap = calculateCubicCapacity(processedData);
+                
+                const transportFirstSeqMap = new Map();
+                processedData.forEach(row => {
+                    if (row.displayBrandSequence == 1) {
+                        if (!transportFirstSeqMap.has(row.transport)) {
+                            transportFirstSeqMap.set(row.transport, true);
+                        }
+                    }
+                });
+                
+                const exportData = processedData.map(row => {
+                    let cubicValue = '';
+                    
+                    if (row.displayBrandSequence == 1 && transportFirstSeqMap.has(row.transport)) {
+                        const cubic = cubicMap.get(row.transport);
+                        if (cubic !== undefined) {
+                            cubicValue = cubic.toFixed(3) + '\nПРОВЕРЬ КУБАТУРУ ТС';
+                        }
+                        transportFirstSeqMap.delete(row.transport);
+                    }
+                    
+                    return {
+                        'Транспорт/№ заказа': row.transport,
+                        '№ магазина': row.storeNumber,
+                        'Бренд/ТЦ': row.brand,
+                        'Место': row.place,
+                        'Кол-во кор': row.quantity,
+                        'Последов-ть Бренда в ТС': row.displayBrandSequence,
+                        'Последов-ть внутри Бренда': row.internalSequenceText,
+                        'Коммент.': row.comment,
+                        'Кубатура': cubicValue
+                    };
+                });
+                
+                const ws = XLSX.utils.json_to_sheet(exportData);
+                const colWidths = [
+                    { wch: 20 },
+                    { wch: 15 },
+                    { wch: 25 },
+                    { wch: 15 },
+                    { wch: 12 },
+                    { wch: 22 },
+                    { wch: 22 },
+                    { wch: 30 },
+                    { wch: 25 }
+                ];
+                ws['!cols'] = colWidths;
+                
+                const cubicSheetData = [];
+                const transportDataMap = new Map();
+                
+                processedData.forEach(row => {
+                    const transport = row.transport;
+                    const quantity = parseFloat(row.quantity) || 0;
+                    const comment = (row.comment || '').toString().toLowerCase();
+                    const internalSeq = (row.internalSequenceText || '').toString();
+                    
+                    let shouldInclude = false;
+                    let category = '';
+                    
+                    if (internalSeq === 'Текстиль') {
+                        shouldInclude = true;
+                        category = 'Текстиль';
+                    } else if (internalSeq === 'Трансфер') {
+                        shouldInclude = true;
+                        category = 'Трансфер';
+                    } else if (internalSeq === 'POSM' && comment.includes('стандарт')) {
+                        shouldInclude = true;
+                        category = 'POSM (стандарт)';
+                    }
+                    
+                    if (shouldInclude) {
+                        if (!transportDataMap.has(transport)) {
+                            transportDataMap.set(transport, {
+                                'Текстиль': { boxes: 0, cubic: 0 },
+                                'Трансфер': { boxes: 0, cubic: 0 },
+                                'POSM (стандарт)': { boxes: 0, cubic: 0 }
+                            });
+                        }
+                        
+                        const data = transportDataMap.get(transport);
+                        data[category].boxes += quantity;
+                        data[category].cubic += quantity * 0.096;
+                    }
+                });
+                
+                transportDataMap.forEach((categories, transport) => {
+                    let totalBoxes = 0;
+                    let totalCubic = 0;
+                    
+                    ['Текстиль', 'Трансфер', 'POSM (стандарт)'].forEach(category => {
+                        if (categories[category].boxes > 0) {
+                            cubicSheetData.push({
+                                'Транспорт/№ заказа': transport,
+                                'Категория': category,
+                                'Кол-во кор': categories[category].boxes,
+                                'Кубатура (м³)': categories[category].cubic.toFixed(3)
+                            });
+                            totalBoxes += categories[category].boxes;
+                            totalCubic += categories[category].cubic;
+                        }
+                    });
+                    
+                    if (totalBoxes > 0) {
+                        cubicSheetData.push({
+                            'Транспорт/№ заказа': transport,
+                            'Категория': 'ИТОГО',
+                            'Кол-во кор': totalBoxes,
+                            'Кубатура (м³)': totalCubic.toFixed(3)
+                        });
+                        cubicSheetData.push({
+                            'Транспорт/№ заказа': '',
+                            'Категория': '',
+                            'Кол-во кор': '',
+                            'Кубатура (м³)': ''
+                        });
+                    }
+                });
+                
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'Приоритизация');
+                
+                if (cubicSheetData.length > 0) {
+                    const ws2 = XLSX.utils.json_to_sheet(cubicSheetData);
+                    const cubicColWidths = [
+                        { wch: 20 },
+                        { wch: 20 },
+                        { wch: 15 },
+                        { wch: 15 }
+                    ];
+                    ws2['!cols'] = cubicColWidths;
+                    XLSX.utils.book_append_sheet(wb, ws2, 'Кубатура');
+                }
+                
+                const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+                XLSX.writeFile(wb, `Приоритизация_загрузки_${timestamp}.xlsx`);
+                showMessage('Excel файл успешно скачан!', 'success');
+            } catch (error) {
+                showMessage(`Ошибка при создании Excel файла: ${error.message}`, 'error');
+            }
+        }
             try {
                 const exportData = processedData.map(row => ({
                     'Транспорт/№ заказа': row.transport,
