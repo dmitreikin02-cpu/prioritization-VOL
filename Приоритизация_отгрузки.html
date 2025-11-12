@@ -1287,7 +1287,7 @@
                     const cubic = cubicMap.get(row.transport);
                     if (cubic !== undefined) {
                         console.log('  Showing cubic for transport:', row.transport, '=', cubic.toFixed(3));
-                        cubicValue = cubic.toFixed(3) + '<br><small>ПРОВЕРЬ КУБАТУРУ ТС</small>';
+                        cubicValue = `<strong>${cubic.toFixed(3)} (м³)</strong><br><small style="color: #c62828;">ПРОВЕРЬ КУБАТУРУ ТС</small>`;
                     } else {
                         console.log('  No cubic data for transport:', row.transport, 'with brandSeq=1');
                     }
@@ -1341,7 +1341,7 @@
                     if (row.displayBrandSequence == 1 && transportFirstSeqMap.has(row.transport)) {
                         const cubic = cubicMap.get(row.transport);
                         if (cubic !== undefined) {
-                            cubicValue = cubic.toFixed(3) + '\nПРОВЕРЬ КУБАТУРУ ТС';
+                            cubicValue = cubic.toFixed(3) + ' (м³)\nПРОВЕРЬ КУБАТУРУ ТС';
                         }
                         transportFirstSeqMap.delete(row.transport);
                     }
@@ -1372,6 +1372,16 @@
                     { wch: 25 }
                 ];
                 ws['!cols'] = colWidths;
+                
+                // Add text wrapping for cubic capacity column (I)
+                const range = XLSX.utils.decode_range(ws['!ref']);
+                for (let row = range.s.r + 1; row <= range.e.r; row++) {
+                    const cellAddress = XLSX.utils.encode_cell({ r: row, c: 8 }); // Column I (index 8)
+                    if (ws[cellAddress]) {
+                        if (!ws[cellAddress].s) ws[cellAddress].s = {};
+                        ws[cellAddress].s.alignment = { wrapText: true, vertical: 'top' };
+                    }
+                }
                 
                 const cubicSheetData = [];
                 const transportDataMap = new Map();
