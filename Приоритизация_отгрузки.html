@@ -1284,27 +1284,30 @@
                 transportRowCount.set(row.transport, count + 1);
             });
             
+            // Track which transports we've shown the warning for
+            const transportWarningShown = new Map();
+            
             const displayData = data.slice(0, 100);
             
             displayData.forEach(row => {
                 const tr = document.createElement('tr');
                 let cubicValue = '';
                 
+                const rowCount = transportRowCount.get(row.transport) || 1;
+                
                 if (row.displayBrandSequence == 1) {
+                    // First row - show cubic value
                     const cubic = cubicMap.get(row.transport);
                     if (cubic !== undefined) {
-                        const rowCount = transportRowCount.get(row.transport) || 1;
                         console.log('  Showing cubic for transport:', row.transport, '=', cubic.toFixed(3), 'rows:', rowCount);
-                        
-                        // If more than 1 row, show in 2 lines; otherwise in 1 line
-                        if (rowCount > 1) {
-                            cubicValue = `<strong>${cubic.toFixed(3)} (м³)</strong><br><small style="color: #c62828;">ПРОВЕРЬ КУБАТУРУ ТС</small>`;
-                        } else {
-                            cubicValue = `<strong>${cubic.toFixed(3)} (м³)</strong>`;
-                        }
+                        cubicValue = `<strong>${cubic.toFixed(3)} (м³)</strong>`;
                     } else {
                         console.log('  No cubic data for transport:', row.transport, 'with brandSeq=1');
                     }
+                } else if (row.displayBrandSequence == 2 && rowCount > 1 && !transportWarningShown.get(row.transport)) {
+                    // Second row - show warning if transport has more than 1 row
+                    cubicValue = `<small style="color: #c62828; font-weight: bold;">ПРОВЕРЬ КУБАТУРУ ТС</small>`;
+                    transportWarningShown.set(row.transport, true);
                 }
                 
                 tr.innerHTML = `
@@ -1348,6 +1351,8 @@
                 });
                 
                 const transportFirstSeqMap = new Map();
+                const transportWarningShown = new Map();
+                
                 processedData.forEach(row => {
                     if (row.displayBrandSequence == 1) {
                         if (!transportFirstSeqMap.has(row.transport)) {
@@ -1359,18 +1364,19 @@
                 const exportData = processedData.map(row => {
                     let cubicValue = '';
                     
+                    const rowCount = transportRowCount.get(row.transport) || 1;
+                    
                     if (row.displayBrandSequence == 1 && transportFirstSeqMap.has(row.transport)) {
+                        // First row - show cubic value
                         const cubic = cubicMap.get(row.transport);
                         if (cubic !== undefined) {
-                            const rowCount = transportRowCount.get(row.transport) || 1;
-                            // If more than 1 row, show in 2 lines; otherwise in 1 line
-                            if (rowCount > 1) {
-                                cubicValue = cubic.toFixed(3) + ' (м³)\nПРОВЕРЬ КУБАТУРУ ТС';
-                            } else {
-                                cubicValue = cubic.toFixed(3) + ' (м³)';
-                            }
+                            cubicValue = cubic.toFixed(3) + ' (м³)';
                         }
                         transportFirstSeqMap.delete(row.transport);
+                    } else if (row.displayBrandSequence == 2 && rowCount > 1 && !transportWarningShown.get(row.transport)) {
+                        // Second row - show warning if transport has more than 1 row
+                        cubicValue = 'ПРОВЕРЬ КУБАТУРУ ТС';
+                        transportWarningShown.set(row.transport, true);
                     }
                     
                     return {
