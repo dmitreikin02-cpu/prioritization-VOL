@@ -1218,7 +1218,10 @@
                 return new Map();
             }
             
+            console.log('calculateCubicCapacity: processing', data.length, 'rows');
+            
             const transportCubicMap = new Map();
+            let includedCount = 0;
             
             data.forEach(row => {
                 const transport = row.transport;
@@ -1227,20 +1230,39 @@
                 const internalSeq = (row.internalSequenceText || '').toString();
                 
                 let shouldInclude = false;
+                let reason = '';
                 
+                // Check for text values (MSC mode)
                 if (internalSeq === 'Текстиль' || internalSeq === 'Трансфер') {
                     shouldInclude = true;
-                } else if (internalSeq === 'POSM' && comment.includes('стандарт')) {
+                    reason = 'Текстиль/Трансфер (text)';
+                } 
+                // Check for text in comment (REG mode) - "Текстиль" or "Трансфер" in comment
+                else if (comment.includes('текстиль') || comment.includes('трансфер')) {
                     shouldInclude = true;
+                    reason = 'Текстиль/Трансфер (comment)';
+                }
+                // Check for POSM with стандарт
+                else if ((internalSeq === 'POSM' || comment.includes('posm')) && comment.includes('стандарт')) {
+                    shouldInclude = true;
+                    reason = 'POSM стандарт';
                 }
                 
                 if (shouldInclude) {
                     if (!transportCubicMap.has(transport)) {
                         transportCubicMap.set(transport, 0);
                     }
-                    transportCubicMap.set(transport, transportCubicMap.get(transport) + (quantity * 0.096));
+                    const newValue = transportCubicMap.get(transport) + (quantity * 0.096);
+                    transportCubicMap.set(transport, newValue);
+                    includedCount++;
+                    if (includedCount <= 5) {
+                        console.log('  Including:', transport, 'internalSeq:', internalSeq, 'comment:', comment.substring(0, 30), 'qty:', quantity, 'reason:', reason, 'new total:', newValue.toFixed(3));
+                    }
                 }
             });
+            
+            console.log('calculateCubicCapacity: included', includedCount, 'rows from', data.length);
+            console.log('calculateCubicCapacity: transports with cubic data:', transportCubicMap.size);
             
             return transportCubicMap;
         }
@@ -1248,7 +1270,13 @@
             const tbody = document.getElementById('previewBody');
             tbody.innerHTML = '';
             
+            console.log('displayPreview: processing', data.length, 'rows');
+            console.log('displayPreview: first row sample:', data[0]);
+            
             const cubicMap = calculateCubicCapacity(data);
+            console.log('displayPreview: cubicMap size:', cubicMap.size);
+            console.log('displayPreview: cubicMap contents:', Array.from(cubicMap.entries()));
+            
             const displayData = data.slice(0, 100);
             
             displayData.forEach(row => {
@@ -1258,7 +1286,10 @@
                 if (row.displayBrandSequence == 1) {
                     const cubic = cubicMap.get(row.transport);
                     if (cubic !== undefined) {
+                        console.log('  Showing cubic for transport:', row.transport, '=', cubic.toFixed(3));
                         cubicValue = cubic.toFixed(3) + '<br><small>ПРОВЕРЬ КУБАТУРУ ТС</small>';
+                    } else {
+                        console.log('  No cubic data for transport:', row.transport, 'with brandSeq=1');
                     }
                 }
                 
@@ -1354,13 +1385,24 @@
                     let shouldInclude = false;
                     let category = '';
                     
+                    // Check for text values (MSC mode)
                     if (internalSeq === 'Текстиль') {
                         shouldInclude = true;
                         category = 'Текстиль';
                     } else if (internalSeq === 'Трансфер') {
                         shouldInclude = true;
                         category = 'Трансфер';
-                    } else if (internalSeq === 'POSM' && comment.includes('стандарт')) {
+                    } 
+                    // Check for text in comment (REG mode)
+                    else if (comment.includes('текстиль')) {
+                        shouldInclude = true;
+                        category = 'Текстиль';
+                    } else if (comment.includes('трансфер')) {
+                        shouldInclude = true;
+                        category = 'Трансфер';
+                    } 
+                    // Check for POSM with стандарт
+                    else if ((internalSeq === 'POSM' || comment.includes('posm')) && comment.includes('стандарт')) {
                         shouldInclude = true;
                         category = 'POSM (стандарт)';
                     }
