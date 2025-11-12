@@ -1277,6 +1277,13 @@
             console.log('displayPreview: cubicMap size:', cubicMap.size);
             console.log('displayPreview: cubicMap contents:', Array.from(cubicMap.entries()));
             
+            // Count rows per transport
+            const transportRowCount = new Map();
+            data.forEach(row => {
+                const count = transportRowCount.get(row.transport) || 0;
+                transportRowCount.set(row.transport, count + 1);
+            });
+            
             const displayData = data.slice(0, 100);
             
             displayData.forEach(row => {
@@ -1286,8 +1293,15 @@
                 if (row.displayBrandSequence == 1) {
                     const cubic = cubicMap.get(row.transport);
                     if (cubic !== undefined) {
-                        console.log('  Showing cubic for transport:', row.transport, '=', cubic.toFixed(3));
-                        cubicValue = `<strong>${cubic.toFixed(3)} (м³)</strong><br><small style="color: #c62828;">ПРОВЕРЬ КУБАТУРУ ТС</small>`;
+                        const rowCount = transportRowCount.get(row.transport) || 1;
+                        console.log('  Showing cubic for transport:', row.transport, '=', cubic.toFixed(3), 'rows:', rowCount);
+                        
+                        // If more than 1 row, show in 2 lines; otherwise in 1 line
+                        if (rowCount > 1) {
+                            cubicValue = `<strong>${cubic.toFixed(3)} (м³)</strong><br><small style="color: #c62828;">ПРОВЕРЬ КУБАТУРУ ТС</small>`;
+                        } else {
+                            cubicValue = `<strong>${cubic.toFixed(3)} (м³)</strong>`;
+                        }
                     } else {
                         console.log('  No cubic data for transport:', row.transport, 'with brandSeq=1');
                     }
@@ -1326,6 +1340,13 @@
                 const cubicMap = calculateCubicCapacity(processedData);
                 console.log('Cubic capacity calculated for', cubicMap.size, 'transports');
                 
+                // Count rows per transport
+                const transportRowCount = new Map();
+                processedData.forEach(row => {
+                    const count = transportRowCount.get(row.transport) || 0;
+                    transportRowCount.set(row.transport, count + 1);
+                });
+                
                 const transportFirstSeqMap = new Map();
                 processedData.forEach(row => {
                     if (row.displayBrandSequence == 1) {
@@ -1341,7 +1362,13 @@
                     if (row.displayBrandSequence == 1 && transportFirstSeqMap.has(row.transport)) {
                         const cubic = cubicMap.get(row.transport);
                         if (cubic !== undefined) {
-                            cubicValue = cubic.toFixed(3) + ' (м³)\nПРОВЕРЬ КУБАТУРУ ТС';
+                            const rowCount = transportRowCount.get(row.transport) || 1;
+                            // If more than 1 row, show in 2 lines; otherwise in 1 line
+                            if (rowCount > 1) {
+                                cubicValue = cubic.toFixed(3) + ' (м³)\nПРОВЕРЬ КУБАТУРУ ТС';
+                            } else {
+                                cubicValue = cubic.toFixed(3) + ' (м³)';
+                            }
                         }
                         transportFirstSeqMap.delete(row.transport);
                     }
@@ -1373,13 +1400,27 @@
                 ];
                 ws['!cols'] = colWidths;
                 
-                // Add text wrapping for cubic capacity column (I)
+                // Configure rows and cells for proper text wrapping
                 const range = XLSX.utils.decode_range(ws['!ref']);
+                if (!ws['!rows']) ws['!rows'] = [];
+                
                 for (let row = range.s.r + 1; row <= range.e.r; row++) {
                     const cellAddress = XLSX.utils.encode_cell({ r: row, c: 8 }); // Column I (index 8)
-                    if (ws[cellAddress]) {
-                        if (!ws[cellAddress].s) ws[cellAddress].s = {};
-                        ws[cellAddress].s.alignment = { wrapText: true, vertical: 'top' };
+                    const cell = ws[cellAddress];
+                    
+                    if (cell && cell.v && cell.v.includes('\n')) {
+                        // This cell has line breaks - configure it
+                        if (!cell.s) cell.s = {};
+                        cell.s.alignment = { 
+                            wrapText: true, 
+                            vertical: 'top',
+                            horizontal: 'left'
+                        };
+                        
+                        // Set row height to accommodate 2 lines (approximately)
+                        if (!ws['!rows'][row]) ws['!rows'][row] = {};
+                        ws['!rows'][row].hpt = 30; // Height in points
+                        ws['!rows'][row].hpx = 30; // Height in pixels
                     }
                 }
                 
